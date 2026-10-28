@@ -312,6 +312,7 @@ The selective script builds the requested apps and their required project depend
 Use `--dry-run` to inspect the planned commands without building.
 
 To compare DynamoDB search settings, run `python scripts/run-wb-comparison.py --app gdpr-kv --runs 5 --seed 26 --evomaster-jar <path-to-evomaster.jar>` (use JDK 21 via `--java` if it is not on `PATH`). Each cycle runs without DynamoDB heuristics, with heuristics but no insertions, and with both heuristics and insertions. Raw output is saved under `results/<app>/cycle-###/<mode>/`.
+Omit `--seed` to generate a different random seed for each cycle; the three modes within a cycle use that same seed, recorded in each mode's `run.json`.
 On Windows, `run-gdpr.bat` and `paper-tracker.bat` provide the corresponding app names and pass through additional command-line options, for example `run-gdpr.bat --evomaster-jar <path-to-evomaster.jar> --java <path-to-java.exe>`.
 Run `python scripts/summarize-wb-comparison.py` to collect one row per cycle and mode in `results/comparison-summary.csv`.
 

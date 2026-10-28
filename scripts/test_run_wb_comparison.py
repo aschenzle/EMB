@@ -131,14 +131,26 @@ class RunWbComparisonTest(unittest.TestCase):
                     self.assertIn("World Cup controller ready", (run / "controller.log").read_text())
 
             appended = subprocess.run([
-                sys.executable, str(SCRIPT), "--app", "world-cup", "--runs", "1",
+                sys.executable, str(SCRIPT), "--app", "world-cup", "--runs", "2",
                 "--dist", str(dist), "--output-dir", str(root / "raw"),
                 "--startup-timeout", "10",
-            ], capture_output=True, text=True, timeout=30)
+            ], capture_output=True, text=True, timeout=60)
             self.assertEqual(0, appended.returncode, appended.stdout + appended.stderr)
-            for mode_name in modes:
-                self.assertTrue((root / "raw" / "world-cup" / "cycle-003" / mode_name
-                                 / "run.json").is_file())
+            generated_seeds = []
+            for cycle in (3, 4):
+                mode_seeds = set()
+                for mode_name in modes:
+                    run = root / "raw" / "world-cup" / f"cycle-{cycle:03d}" / mode_name
+                    metadata = json.loads((run / "run.json").read_text(encoding="utf-8"))
+                    seed = metadata["seed"]
+                    self.assertTrue(1 <= seed < 2**63)
+                    self.assertIn(f"--seed={seed}", metadata["evomaster_command"])
+                    self.assertEqual(f"seed={seed}",
+                                     (run / "tests" / "WorldCupTest.java").read_text())
+                    mode_seeds.add(seed)
+                self.assertEqual(1, len(mode_seeds))
+                generated_seeds.append(mode_seeds.pop())
+            self.assertNotEqual(generated_seeds[0], generated_seeds[1])
 
 
 if __name__ == "__main__":

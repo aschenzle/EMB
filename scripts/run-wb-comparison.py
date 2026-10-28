@@ -5,13 +5,15 @@ Example (requires the SUT, controller, agent, and EvoMaster CLI jars):
     python scripts/run-wb-comparison.py --app gdpr-kv --runs 3 --seed 42 \
         --evomaster-jar /path/to/evomaster.jar
 
-Each cycle runs all three DynamoDB modes with the same seed. Each mode retains
+Each cycle runs all three DynamoDB modes with the same seed. Without --seed,
+each cycle gets a different randomly generated seed. Each mode retains
 EvoMaster's generated tests and statistics, plus raw process logs.
 """
 
 import argparse
 import json
 import os
+import random
 import shutil
 import signal
 import socket
@@ -58,7 +60,8 @@ def parse_args():
     parser.add_argument("--app", required=True, help="application name, e.g. gdpr-kv")
     parser.add_argument("--runs", type=positive_int, required=True,
                         help="number of three-mode comparison cycles")
-    parser.add_argument("--seed", type=int, default=42, help="same seed for every run (default: 42)")
+    parser.add_argument("--seed", type=int,
+                        help="fixed seed for every cycle (default: a random seed per cycle)")
     parser.add_argument("--dist", type=Path, default=PROJECT_DIR / "dist")
     parser.add_argument("--evomaster-jar", type=Path,
                         help="EvoMaster CLI jar (default: <dist>/evomaster.jar)")
@@ -74,8 +77,8 @@ def parse_args():
         parser.error("--app must be a single application name")
     if args.controller_port >= 65535:
         parser.error("--controller-port must leave room for the SUT port")
-    if args.seed < 0:
-        parser.error("--seed must be non-negative; EvoMaster uses negative seeds for clock-based randomness")
+    if args.seed is not None and not 0 <= args.seed < 2**63:
+        parser.error("--seed must be a non-negative signed 64-bit integer")
     return args
 
 
@@ -136,7 +139,7 @@ def controller_warnings(log_path):
     return []
 
 
-def run_once(args, cycle_number, mode, run_dir, sut_jar, runner_jar, agent_jar, evomaster_jar):
+def run_once(args, cycle_number, seed, mode, run_dir, sut_jar, runner_jar, agent_jar, evomaster_jar):
     """Run one mode with the controller and EvoMaster in separate threads."""
     run_dir.mkdir(parents=True)
     controller_command = [args.java, "-Dem.muteSUT=true",
@@ -146,7 +149,7 @@ def run_once(args, cycle_number, mode, run_dir, sut_jar, runner_jar, agent_jar, 
                           str(args.startup_timeout), args.java]
     em_command = [args.em_java or args.java, "-jar", str(evomaster_jar),
                   "--blackBox=false", f"--sutControllerPort={args.controller_port}",
-                  f"--seed={args.seed}", "--stoppingCriterion=TIME",
+                  f"--seed={seed}", "--stoppingCriterion=TIME",
                   f"--maxTime={args.max_time}",
                   f"--outputFolder={run_dir / 'tests'}",
                   "--writeStatistics=true",
@@ -155,7 +158,7 @@ def run_once(args, cycle_number, mode, run_dir, sut_jar, runner_jar, agent_jar, 
                   f"--heuristicsForDynamoDb={str(mode.dynamodb_heuristics).lower()}",
                   f"--extractDynamoDbExecutionInfo={str(mode.extract_dynamodb_execution_info).lower()}",
                   f"--generateDynamoDbData={str(mode.generate_dynamodb_data).lower()}"]
-    metadata = {"app": args.app, "cycle": cycle_number, "mode": mode.name, "seed": args.seed,
+    metadata = {"app": args.app, "cycle": cycle_number, "mode": mode.name, "seed": seed,
                 "instrument_dynamodb": mode.instrument_dynamodb,
                 "dynamodb_heuristics": mode.dynamodb_heuristics,
                 "extract_dynamodb_execution_info": mode.extract_dynamodb_execution_info,
@@ -266,13 +269,22 @@ def main():
         cycle_dir = args.output_dir / args.app / f"cycle-{number:03d}"
         if cycle_dir.exists():
             raise SystemExit(f"Output directory already exists: {cycle_dir}")
+    random_generator = random.SystemRandom()
+    generated_seeds = set()
     for index, number in enumerate(range(first_cycle, first_cycle + args.runs), start=1):
+        if args.seed is None:
+            cycle_seed = random_generator.randrange(1, 2**63)
+            while cycle_seed in generated_seeds:
+                cycle_seed = random_generator.randrange(1, 2**63)
+            generated_seeds.add(cycle_seed)
+        else:
+            cycle_seed = args.seed
         for mode in MODES:
             run_dir = args.output_dir / args.app / f"cycle-{number:03d}" / mode.name
             print(f"Running {args.app} cycle {index}/{args.runs}, {mode.name}, "
-                  f"seed {args.seed}: {run_dir}", flush=True)
+                  f"seed {cycle_seed}: {run_dir}", flush=True)
             try:
-                warnings = run_once(args, number, mode, run_dir, sut_jar, runner_jar,
+                warnings = run_once(args, number, cycle_seed, mode, run_dir, sut_jar, runner_jar,
                                     agent_jar, evomaster_jar)
             except RuntimeError as error:
                 raise SystemExit(f"Cycle {index}, {mode.name} failed: {error}") from error
