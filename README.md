@@ -300,11 +300,20 @@ _Black-box_ testing: you can build all the SUTs via Docker using  `scripts/dist-
 docker-compose -f dockerfiles/reservations-api.yaml up
 ```
 
-_White-box_ testing: everything can be setup by running the script `scripts/dist.py`.
+_White-box_ testing: everything can be setup by running the script `scripts/dist-wb.py`.
 Note that you will need installed at least Maven, Gradle, JDK 8, JDK 11, JDK 17, JDK 21, JDK 25, NPM, as well as Docker.
 Also, you will need to setup environment variables like `JAVA_HOME_8`, `JAVA_HOME_11`,  `JAVA_HOME_17`, `JAVA_HOME_21` and `JAVA_HOME_25`.
 The script will issue error messages if any prerequisite is missing.
 Once the script is completed, not only all the SUTs will be available under the `dist` folder, but also all the _driver_ executables for _EvoMaster_. 
+
+To build only selected white-box apps, use `python scripts/dist-wb-selected.py arimaa blogapi`.
+Run `python scripts/dist-wb-selected.py --list` to see supported names, which are defined with their build modules in `scripts/dist-wb-apps.csv`.
+The selective script builds the requested apps and their required project dependencies, copies their SUT and runner JARs plus the EvoMaster agent and JaCoCo JARs to `dist`, and does not clear `dist` (matching files are updated).
+Use `--dry-run` to inspect the planned commands without building.
+
+To compare DynamoDB search settings, run `python scripts/run-wb-comparison.py --app gdpr-kv --runs 5 --seed 26 --evomaster-jar <path-to-evomaster.jar>` (use JDK 21 via `--java` if it is not on `PATH`). Each cycle runs without DynamoDB heuristics, with heuristics but no insertions, and with both heuristics and insertions. Raw output is saved under `results/<app>/cycle-###/<mode>/`.
+On Windows, `run-gdpr.bat` and `paper-tracker.bat` provide the corresponding app names and pass through additional command-line options, for example `run-gdpr.bat --evomaster-jar <path-to-evomaster.jar> --java <path-to-java.exe>`.
+Run `python scripts/summarize-wb-comparison.py` to collect one row per cycle and mode in `results/comparison-summary.csv`.
 
 Regarding Maven, most-third party dependencies are automatically downloaded from Maven Central.
 However, some dependencies are from GitHub, which unfortunately require authentication to be able to download such dependencies.

@@ -35,6 +35,9 @@ js_npm/evomaster-client-js
 /temp/
 /dist.zip
 /dist/
+/results/
+__pycache__/
+*.pyc
 
 /jdk_8_maven/.idea
 /jdk_8_maven/temp
